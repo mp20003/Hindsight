@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hindsight — Failure Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0e0d;
+  --bg2:#161513;
+  --bg3:#1e1c1a;
+  --bg4:#252220;
+  --ember:#c4622a;
+  --ember-dim:#7a3a18;
+  --text:#d4cfc9;
+  --text-dim:#7a756f;
+  --text-faint:#3a3733;
+  --border:#2a2724;
+  --sidebar:230px;
+  --col-work:#4a90d9;
+  --col-rel:#c4622a;
+  --col-health:#5cb85c;
+  --col-money:#f0ad4e;
+  --col-creative:#9b59b6;
+  --col-other:#7a8b8b;
+  --r:6px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Lora',serif;font-size:15px;line-height:1.6}
+
+/* Grain overlay */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:0.35;
+}
+
+/* Layout */
+#app{display:flex;height:100vh}
+#sidebar{width:var(--sidebar);min-width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+/* Sidebar */
+#sidebar-logo{padding:20px 16px 12px;border-bottom:1px solid var(--border)}
+#sidebar-logo h1{font-size:18px;font-weight:600;color:var(--text);letter-spacing:0.03em}
+#sidebar-logo span{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;display:block;margin-top:2px}
+#btn-new{margin:12px;background:var(--ember);color:#fff;border:none;border-radius:var(--r);padding:9px 14px;font-family:'Lora',serif;font-size:13px;font-weight:600;cursor:pointer;width:calc(100% - 24px);transition:background 0.15s,transform 0.1s}
+#btn-new:hover{background:#d4703a}
+#btn-new:active{transform:scale(0.98)}
+#nav-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 8px}
+.nav-tab{flex:1;padding:8px 4px;background:none;border:none;color:var(--text-dim);font-family:'Lora',serif;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;transition:color 0.15s,border-color 0.15s;position:relative}
+.nav-tab.active{color:var(--text);border-bottom-color:var(--ember)}
+.nav-tab .badge{position:absolute;top:4px;right:2px;background:var(--ember);color:#fff;font-family:'JetBrains Mono',monospace;font-size:9px;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center}
+#entry-list{flex:1;overflow-y:auto;padding:6px 0}
+#entry-list::-webkit-scrollbar{width:4px}
+#entry-list::-webkit-scrollbar-track{background:transparent}
+#entry-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.entry-item{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;transition:background 0.12s,border-color 0.12s;position:relative}
+.entry-item:hover{background:var(--bg3)}
+.entry-item.active{background:var(--bg3);border-left-color:var(--ember)}
+.entry-item-top{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.area-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.entry-item-title{font-size:12px;color:var(--text);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;font-family:'Lora',serif}
+.entry-item-date{font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.checkin-pill{font-size:9px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:10px;font-weight:500;color:#fff;white-space:nowrap}
+.pill-7{background:#3a7a3a}
+.pill-30{background:#2a5a8a}
+.pill-90{background:#7a6010}
+.entry-item-bottom{display:flex;align-items:center;gap:5px;margin-top:2px}
+#control-panel{padding:14px;border-top:1px solid var(--border)}
+#control-panel h4{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+#control-bar-wrap{background:var(--bg4);border-radius:20px;height:6px;overflow:hidden;margin-bottom:6px}
+#control-bar{height:100%;background:linear-gradient(90deg,#c4622a,#5cb85c);border-radius:20px;transition:width 0.5s}
+#control-label{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+#control-interp{font-size:11px;color:var(--text-dim);margin-top:4px;font-style:italic}
+
+/* Main area */
+#main-content{flex:1;overflow-y:auto;padding:0}
+#main-content::-webkit-scrollbar{width:6px}
+#main-content::-webkit-scrollbar-track{background:transparent}
+#main-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Test mode bar */
+#test-bar{background:#1a1060;border-bottom:1px solid #3a2a90;padding:8px 20px;display:none;align-items:center;gap:10px;flex-shrink:0}
+#test-bar span{font-size:11px;font-family:'JetBrains Mono',monospace;color:#9a8aff}
+.test-btn{background:#2a1a80;border:1px solid #3a2a90;color:#9a8aff;font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer}
+.test-btn:hover{background:#3a2a90}
+#test-offset-label{font-size:11px;font-family:'JetBrains Mono',monospace;color:#6a5adf;margin-left:auto}
+
+/* Shared form/view styles */
+.view{padding:32px 40px;max-width:720px;margin:0 auto}
+.view h2{font-size:22px;font-weight:600;color:var(--text);margin-bottom:6px}
+.view-sub{font-size:13px;color:var(--text-dim);margin-bottom:28px}
+.field-block{margin-bottom:22px}
+.field-label{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;display:block}
+.field-label .req{color:var(--ember)}
+textarea,input[type=text]{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-family:'Lora',serif;font-size:14px;resize:vertical;outline:none;transition:border-color 0.15s}
+textarea:focus,input[type=text]:focus{border-color:var(--ember-dim)}
+textarea{min-height:72px}
+textarea.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
+
+/* Chip selector */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);font-size:12px;cursor:pointer;transition:all 0.15s;font-family:'JetBrains Mono',monospace}
+.chip:hover{border-color:var(--text-dim)}
+.chip.selected{color:#fff;border-color:transparent}
+
+/* Slider */
+.slider-wrap{padding:4px 0}
+input[type=range]{width:100%;accent-color:var(--ember);cursor:pointer}
+.slider-labels{display:flex;justify-content:space-between;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-top:4px}
+.slider-val{text-align:center;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--ember);margin-top:4px}
+
+/* Buttons */
+.btn{padding:10px 20px;border:none;border-radius:var(--r);font-family:'Lora',serif;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.btn-primary{background:var(--ember);color:#fff}
+.btn-primary:hover{background:#d4703a}
+.btn-secondary{background:var(--bg4);color:var(--text-dim);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg3);color:var(--text)}
+.btn-row{display:flex;gap:10px;margin-top:24px}
+
+/* Private note */
+.private-note-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-top:24px}
+.private-label{display:flex;align-items:center;gap:6px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+.lock-badge{font-size:13px}
+
+/* Rule prompt */
+#rule-prompt-view{padding:40px;max-width:640px;margin:0 auto}
+#rule-prompt-view h2{font-size:20px;color:var(--text);margin-bottom:8px}
+#rule-prompt-view p{color:var(--text-dim);font-size:13px;margin-bottom:20px}
+.assumption-box{background:var(--bg3);border-left:3px solid var(--ember);border-radius:0 var(--r) var(--r) 0;padding:14px 16px;font-style:italic;color:var(--text);margin-bottom:20px;font-size:14px}
+
+/* Entry detail */
+.detail-field{margin-bottom:20px}
+.detail-label{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px}
+.detail-value{font-size:14px;color:var(--text);line-height:1.65}
+.detail-value.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
+.detail-header{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.detail-area-chip{padding:4px 12px;border-radius:12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#fff}
+.detail-date{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-left:auto}
+.checkin-banner{padding:14px 18px;border-radius:var(--r);margin-bottom:24px;display:flex;align-items:center;justify-content:space-between}
+.checkin-banner.day7{background:#1a3a1a;border:1px solid #3a7a3a}
+.checkin-banner.day30{background:#0a1a2a;border:1px solid #2a5a8a}
+.checkin-banner.day90{background:#1a1500;border:1px solid #7a6010}
+.checkin-banner p{font-size:13px;color:var(--text)}
+.checkin-banner strong{display:block;font-size:12px;font-family:'JetBrains Mono',monospace;margin-bottom:3px}
+.control-indicator{display:flex;align-items:center;gap:8px}
+.control-pip{width:10px;height:10px;border-radius:50%;background:var(--ember)}
+.ci-history{margin-top:28px;border-top:1px solid var(--border);padding-top:20px}
+.ci-history h3{font-size:13px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px}
+.ci-card{background:var(--bg3);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.ci-card-label{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px}
+.ci-card-text{font-size:13px;color:var(--text);line-height:1.6}
+
+/* Check-in views */
+.checkin-view{padding:32px 40px;max-width:680px;margin:0 auto}
+.checkin-view h2{font-size:20px;color:var(--text);margin-bottom:6px}
+.checkin-view .stage-label{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:20px;display:block}
+.reveal-hint{font-size:13px;color:var(--text-dim);font-style:italic;margin-bottom:16px}
+.revealed-entry{background:var(--bg3);border-radius:var(--r);padding:16px;margin-bottom:20px;display:none}
+.yesno-row{display:flex;gap:10px;margin:16px 0}
+.yesno-btn{padding:8px 20px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text-dim);font-family:'Lora',serif;font-size:13px;cursor:pointer;transition:all 0.15s}
+.yesno-btn:hover,.yesno-btn.sel{background:var(--ember);color:#fff;border-color:var(--ember)}
+
+/* Rules tab */
+.rules-view{padding:32px 40px;max-width:680px;margin:0 auto}
+.rules-view h2{font-size:22px;color:var(--text);margin-bottom:6px}
+.rule-item{background:var(--bg3);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px;position:relative}
+.rule-num{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ember);min-width:22px;padding-top:1px}
+.rule-body{flex:1}
+.rule-text{font-size:14px;color:var(--text);margin-bottom:4px}
+.rule-source{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.rule-del{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-faint);font-size:16px;cursor:pointer;opacity:0;transition:opacity 0.15s,color 0.15s;padding:4px}
+.rule-item:hover .rule-del{opacity:1}
+.rule-del:hover{color:#e05050}
+.empty-state{text-align:center;padding:60px 30px;color:var(--text-dim)}
+.empty-state .icon{font-size:36px;margin-bottom:12px}
+.empty-state p{font-size:13px;line-height:1.7}
+
+/* Map tab */
+.map-view{padding:32px 40px;max-width:800px;margin:0 auto}
+.map-view h2{font-size:22px;color:var(--text);margin-bottom:6px}
+.map-grid-wrap{overflow-x:auto;margin-bottom:30px}
+.map-grid{display:grid;grid-template-columns:80px repeat(12,1fr);gap:3px;min-width:520px}
+.map-header{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);text-align:center;padding:4px 2px}
+.map-row-label{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);display:flex;align-items:center;gap:5px;padding-right:6px}
+.map-cell{height:28px;border-radius:3px;background:var(--bg4);cursor:pointer;transition:opacity 0.15s;position:relative}
+.map-cell:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a1916;border:1px solid var(--border);color:var(--text);font-size:10px;font-family:'JetBrains Mono',monospace;padding:4px 8px;border-radius:4px;white-space:nowrap;z-index:10;pointer-events:none}
+.area-breakdown{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.area-card{background:var(--bg3);border-radius:var(--r);padding:14px}
+.area-card-label{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.area-card-count{font-size:22px;font-weight:600;color:var(--text);margin-bottom:2px}
+.area-card-pct{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim);margin-bottom:8px}
+.area-bar-wrap{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+.area-bar{height:100%;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-logo">
+      <h1>Hindsight</h1>
+      <span>private failure log</span>
+    </div>
+    <button id="btn-new" onclick="showNewEntry()">+ New Entry</button>
+    <div id="nav-tabs">
+      <button class="nav-tab active" id="tab-entries" onclick="switchTab('entries')">Entries<span class="badge" id="due-badge" style="display:none"></span></button>
+      <button class="nav-tab" id="tab-rules" onclick="switchTab('rules')">Rules</button>
+      <button class="nav-tab" id="tab-map" onclick="switchTab('map')">Map</button>
+    </div>
+    <div id="entry-list"></div>
+    <div id="control-panel">
+      <h4>Control Ratio</h4>
+      <div id="control-bar-wrap"><div id="control-bar" style="width:0%"></div></div>
+      <div id="control-label">0% Inside Control</div>
+      <div id="control-interp"></div>
+    </div>
+  </div>
+  <div id="main">
+    <div id="test-bar">
+      <span>&#x1F9EA; TEST MODE</span>
+      <button class="test-btn" onclick="shiftTime(7)">+7d</button>
+      <button class="test-btn" onclick="shiftTime(30)">+30d</button>
+      <button class="test-btn" onclick="shiftTime(90)">+90d</button>
+      <button class="test-btn" onclick="resetTime()">Reset</button>
+      <span id="test-offset-label"></span>
+    </div>
+    <div id="main-content"></div>
+  </div>
+</div>
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────
+var AREAS = [
+  {id:'work',label:'Work',color:'#4a90d9'},
+  {id:'rel',label:'Relationships',color:'#c4622a'},
+  {id:'health',label:'Health',color:'#5cb85c'},
+  {id:'money',label:'Money',color:'#f0ad4e'},
+  {id:'creative',label:'Creative',color:'#9b59b6'},
+  {id:'other',label:'Other',color:'#7a8b8b'}
+];
+
+var ENTRIES_KEY = 'hindsight_v3';
+var RULES_KEY = 'hindsight_rules';
+var timeOffset = 0; // ms, for test mode
+var testMode = false;
+var currentView = 'home'; // 'home'|'new'|'detail'|'rule-prompt'|'checkin'
+var currentEntryId = null;
+var pendingRuleEntryId = null;
+var activeTab = 'entries';
+var keySeq = [];
+
+function now() { return new Date(Date.now() + timeOffset); }
+function today() { var d=now(); d.setHours(0,0,0,0); return d; }
+function daysSince(ts) { return Math.floor((today()-new Date(ts))/(1000*60*60*24)); }
+
+function loadEntries() { try{return JSON.parse(localStorage.getItem(ENTRIES_KEY)||'[]');}catch(e){return[];} }
+function saveEntries(arr) { localStorage.setItem(ENTRIES_KEY,JSON.stringify(arr)); }
+function loadRules() { try{return JSON.parse(localStorage.getItem(RULES_KEY)||'[]');}catch(e){return[];} }
+function saveRules(arr) { localStorage.setItem(RULES_KEY,JSON.stringify(arr)); }
+
+function getArea(id) {
+  for(var i=0;i<AREAS.length;i++){ if(AREAS[i].id===id) return AREAS[i]; }
+  return AREAS[5];
+}
+
+function uid() { return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+function fmtDate(ts) {
+  var d=new Date(ts);
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+}
+
+function fmtMonth(m) {
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m];
+}
+
+function checkInDue(entry) {
+  var d=daysSince(entry.ts);
+  if(!entry.ci90 && d>=90) return 90;
+  if(!entry.ci30 && d>=30) return 30;
+  if(!entry.ci7  && d>=7)  return 7;
+  return 0;
+}
+
+// ── Key listener for test mode ─────────────────────────────────────────────
+document.addEventListener('keydown',function(e){
+  keySeq.push(e.key.toLowerCase());
+  if(keySeq.length>3) keySeq.shift();
+  if(keySeq.join('')==='stm' && e.shiftKey) { toggleTestMode(); keySeq=[]; }
+});
+// Actually listen for shift+t then m
+var tmKeys=[];
+document.addEventListener('keydown',function(e){
+  if(e.key==='T'&&e.shiftKey){ tmKeys=['T']; }
+  else if(e.key==='M'&&tmKeys.length===1){ toggleTestMode(); tmKeys=[]; }
+  else{ tmKeys=[]; }
+});
+
+function toggleTestMode() {
+  testMode=!testMode;
+  document.getElementById('test-bar').style.display=testMode?'flex':'none';
+  updateTestLabel();
+}
+function shiftTime(days) { timeOffset+=days*24*60*60*1000; updateTestLabel(); renderAll(); }
+function resetTime() { timeOffset=0; updateTestLabel(); renderAll(); }
+function updateTestLabel() {
+  var days=Math.round(timeOffset/(24*60*60*1000));
+  document.getElementById('test-offset-label').textContent=days===0?'now':'+'+days+'d simulated';
+}
+
+// ── Render All ─────────────────────────────────────────────────────────────
+function renderAll() {
+  renderSidebar();
+  renderControlPanel();
+  // don't change main view
+}
+
+function renderSidebar() {
+  var entries=loadEntries();
+  var dueCount=0;
+  var html='';
+  // Sort newest first
+  entries.sort(function(a,b){return b.ts-a.ts;});
+  for(var i=0;i<entries.length;i++){
+    var e=entries[i];
+    var area=getArea(e.area);
+    var due=checkInDue(e);
+    if(due) dueCount++;
+    var pillHtml='';
+    if(due===7) pillHtml='<span class="checkin-pill pill-7">Day 7</span>';
+    else if(due===30) pillHtml='<span class="checkin-pill pill-30">Day 30</span>';
+    else if(due===90) pillHtml='<span class="checkin-pill pill-90">Day 90</span>';
+    var active=currentEntryId===e.id?'active':'';
+    html+='<div class="entry-item '+active+'" onclick="showDetail(\''+e.id+'\')">';
+    html+='<div class="entry-item-top">';
+    html+='<span class="area-dot" style="background:'+area.color+'"></span>';
+    html+='<span class="entry-item-title">'+escHtml(e.what||'(untitled)')+'</span>';
+    html+='</div>';
+    html+='<div class="entry-item-bottom">';
+    html+='<span class="entry-item-date">'+fmtDate(e.ts)+'</span>';
+    if(pillHtml) html+=pillHtml;
+    html+='</div></div>';
+  }
+  if(!html) html='<div style="padding:20px 14px;font-size:12px;color:var(--text-faint);font-family:JetBrains Mono,monospace;font-style:italic">No entries yet.</div>';
+  document.getElementById('entry-list').innerHTML=html;
+  var badge=document.getElementById('due-badge');
+  if(dueCount>0){badge.textContent=dueCount;badge.style.display='';}else{badge.style.display='none';}
+}
+
+function renderControlPanel() {
+  var entries=loadEntries();
+  if(!entries.length){
+    document.getElementById('control-bar').style.width='0%';
+    document.getElementById('control-label').textContent='No data yet';
+    document.getElementById('control-interp').textContent='';
+    return;
+  }
+  var sum=0;
+  for(var i=0;i<entries.length;i++) sum+=(entries[i].control||0);
+  var avg=sum/entries.length;
+  var pct=Math.round((avg/4)*100);
+  document.getElementById('control-bar').style.width=pct+'%';
+  document.getElementById('control-label').textContent=pct+'% Inside Control';
+  var interp='';
+  if(pct<30) interp='Mostly external attribution';
+  else if(pct<55) interp='Balanced — mixed locus';
+  else if(pct<80) interp='Mostly self-led reflection';
+  else interp='High internal ownership';
+  document.getElementById('control-interp').textContent=interp;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab=tab;
+  var tabs=['entries','rules','map'];
+  for(var i=0;i<tabs.length;i++){
+    var el=document.getElementById('tab-'+tabs[i]);
+    if(el) el.className='nav-tab'+(tabs[i]===tab?' active':'');
+  }
+  document.getElementById('entry-list').style.display=tab==='entries'?'':'none';
+  if(tab==='rules') showRules();
+  else if(tab==='map') showMap();
+  else { currentView='home'; renderSidebar(); showHome(); }
+}
+
+function showHome() {
+  currentEntryId=null;
+  document.getElementById('entry-list').style.display='';
+  document.getElementById('main-content').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-faint);font-size:13px;font-family:JetBrains Mono,monospace;font-style:italic">Select an entry or create a new one.</div>';
+}
+
+// ── New Entry Form ────────────────────────────────────────────────────────
+function showNewEntry() {
+  switchTab('entries');
+  currentEntryId=null;
+  currentView='new';
+  renderSidebar();
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+
+  var chipsHtml='';
+  for(var i=0;i<AREAS.length;i++){
+    chipsHtml+='<span class="chip" id="chip-'+AREAS[i].id+'" style="--chip-color:'+AREAS[i].color+'" onclick="selectChip(\''+AREAS[i].id+'\')">'+AREAS[i].label+'</span>';
+  }
+
+  var html='<div class="view">';
+  html+='<h2>New Entry</h2>';
+  html+='<p class="view-sub">Record what happened with honesty and distance.</p>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">Life Area <span class="req">*</span></span>';
+  html+='<div class="chips" id="chips-area">'+chipsHtml+'</div>';
+  html+='<input type="hidden" id="f-area" value="">';
+  html+='</div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">What happened <span class="req">*</span></span>';
+  html+='<span style="font-size:11px;color:var(--text-dim);font-family:JetBrains Mono,monospace;display:block;margin-bottom:5px">Facts only — 1–2 sentences</span>';
+  html+='<textarea id="f-what" rows="3" placeholder="Just the facts, no interpretation."></textarea>';
+  html+='</div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">How it feels</span>';
+  html+='<span style="font-size:11px;color:var(--text-dim);font-family:JetBrains Mono,monospace;display:block;margin-bottom:5px">Name the feeling — don\'t explain it</span>';
+  html+='<input type="text" id="f-feel" placeholder="e.g. Ashamed. Relieved. Resentful.">';
+  html+='</div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">The assumption</span>';
+  html+='<span style="font-size:11px;color:var(--text-dim);font-family:JetBrains Mono,monospace;display:block;margin-bottom:5px">What belief turned out to be wrong?</span>';
+  html+='<textarea id="f-assume" rows="2" placeholder="\'I assumed that...\'"></textarea>';
+  html+='</div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">Control attribution</span>';
+  html+='<div class="slider-wrap">';
+  html+='<input type="range" id="f-control" min="0" max="4" value="2" oninput="updateSlider()">';
+  html+='<div class="slider-labels"><span>Outside</span><span>Partially</span><span>Inside</span></div>';
+  html+='<div class="slider-val" id="slider-val-disp">2 — Partially Inside</div>';
+  html+='</div></div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">The friend test</span>';
+  html+='<span style="font-size:11px;color:var(--text-dim);font-family:JetBrains Mono,monospace;display:block;margin-bottom:5px">What would you tell a close friend who did this?</span>';
+  html+='<textarea id="f-friend" rows="3" placeholder="\'I would tell them...\'"></textarea>';
+  html+='</div>';
+
+  html+='<div class="field-block">';
+  html+='<span class="field-label">Implementation intention</span>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">';
+  html+='<div>';
+  html+='<span style="font-size:10px;font-family:JetBrains Mono,monospace;color:var(--text-dim);display:block;margin-bottom:4px">When I see [signal]</span>';
+  html+='<textarea id="f-ii-signal" rows="2" placeholder="a trigger or situation..."></textarea>';
+  html+='</div><div>';
+  html+='<span style="font-size:10px;font-family:JetBrains Mono,monospace;color:var(--text-dim);display:block;margin-bottom:4px">I will [action]</span>';
+  html+='<textarea id="f-ii-action" rows="2" placeholder="the specific response..."></textarea>';
+  html+='</div></div></div>';
+
+  html+='<div class="private-note-wrap">';
+  html+='<div class="private-label"><span class="lock-badge">&#128274;</span> Private Note</div>';
+  html+='<textarea id="f-private" rows="3" placeholder="Freeform — only you will see this."></textarea>';
+  html+='</div>';
+
+  html+='<div class="btn-row">';
+  html+='<button class="btn btn-primary" onclick="saveNewEntry()">Save Entry</button>';
+  html+='<button class="btn btn-secondary" onclick="showHome()">Cancel</button>';
+  html+='</div></div>';
+
+  mc.innerHTML=html;
+  updateSlider();
+}
+
+var selectedArea='';
+function selectChip(areaId) {
+  selectedArea=areaId;
+  document.getElementById('f-area').value=areaId;
+  for(var i=0;i<AREAS.length;i++){
+    var el=document.getElementById('chip-'+AREAS[i].id);
+    if(!el) continue;
+    if(AREAS[i].id===areaId){
+      el.className='chip selected';
+      el.style.background=AREAS[i].color;
+    } else {
+      el.className='chip';
+      el.style.background='';
+    }
+  }
+}
+
+var SLIDER_LABELS=['Outside My Control','Mostly Outside','Partially Inside','Mostly Inside','Fully Inside'];
+function updateSlider() {
+  var v=parseInt(document.getElementById('f-control').value);
+  document.getElementById('slider-val-disp').textContent=v+' — '+SLIDER_LABELS[v];
+}
+
+function saveNewEntry() {
+  var area=document.getElementById('f-area').value;
+  var what=(document.getElementById('f-what').value||'').trim();
+  if(!area){alert('Please select a life area.');return;}
+  if(!what){alert('Please describe what happened.');return;}
+  var entry={
+    id:uid(),
+    ts:now().getTime(),
+    area:area,
+    what:what,
+    feel:(document.getElementById('f-feel').value||'').trim(),
+    assume:(document.getElementById('f-assume').value||'').trim(),
+    control:parseInt(document.getElementById('f-control').value),
+    friend:(document.getElementById('f-friend').value||'').trim(),
+    iiSignal:(document.getElementById('f-ii-signal').value||'').trim(),
+    iiAction:(document.getElementById('f-ii-action').value||'').trim(),
+    priv:(document.getElementById('f-private').value||'').trim(),
+    ci7:null,ci30:null,ci90:null
+  };
+  var entries=loadEntries();
+  entries.push(entry);
+  saveEntries(entries);
+  renderAll();
+  if(entry.assume){
+    showRulePrompt(entry.id);
+  } else {
+    showDetail(entry.id);
+  }
+}
+
+// ── Rule Prompt ───────────────────────────────────────────────────────────
+function showRulePrompt(entryId) {
+  currentView='rule-prompt';
+  pendingRuleEntryId=entryId;
+  var entries=loadEntries();
+  var entry=null;
+  for(var i=0;i<entries.length;i++){if(entries[i].id===entryId){entry=entries[i];break;}}
+  if(!entry){showDetail(entryId);return;}
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+  var html='<div id="rule-prompt-view">';
+  html+='<h2>Rewrite as a Rule</h2>';
+  html+='<p>You identified an assumption that failed. Can you rewrite it as a personal rule — something you\'ll carry forward?</p>';
+  html+='<div class="assumption-box">'+escHtml(entry.assume)+'</div>';
+  html+='<div class="field-block">';
+  html+='<span class="field-label">Your rule (start with "I")</span>';
+  html+='<textarea id="rule-text" rows="3" placeholder="I will... / I know that... / I no longer..."></textarea>';
+  html+='</div>';
+  html+='<div class="btn-row">';
+  html+='<button class="btn btn-primary" onclick="saveRule()">Add to my rules</button>';
+  html+='<button class="btn btn-secondary" onclick="showDetail(\''+entryId+'\')">Skip for now</button>';
+  html+='</div></div>';
+  mc.innerHTML=html;
+}
+
+function saveRule() {
+  var text=(document.getElementById('rule-text').value||'').trim();
+  if(!text){showDetail(pendingRuleEntryId);return;}
+  var entries=loadEntries();
+  var entry=null;
+  for(var i=0;i<entries.length;i++){if(entries[i].id===pendingRuleEntryId){entry=entries[i];break;}}
+  var rules=loadRules();
+  rules.push({
+    id:uid(),
+    text:text,
+    entryId:pendingRuleEntryId,
+    entryWhat:entry?entry.what:'',
+    area:entry?entry.area:'other',
+    ts:now().getTime()
+  });
+  saveRules(rules);
+  showDetail(pendingRuleEntryId);
+}
+
+// ── Entry Detail ──────────────────────────────────────────────────────────
+function showDetail(entryId) {
+  currentEntryId=entryId;
+  currentView='detail';
+  switchTab('entries');
+  renderSidebar();
+  var entries=loadEntries();
+  var entry=null;
+  for(var i=0;i<entries.length;i++){if(entries[i].id===entryId){entry=entries[i];break;}}
+  if(!entry){showHome();return;}
+  var area=getArea(entry.area);
+  var due=checkInDue(entry);
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+  var html='<div class="view">';
+  // Header
+  html+='<div class="detail-header">';
+  html+='<span class="detail-area-chip" style="background:'+area.color+'">'+area.label+'</span>';
+  html+='<span class="detail-date">'+fmtDate(entry.ts)+'</span>';
+  html+='</div>';
+  // Check-in banner
+  if(due){
+    var bannerClass=due===7?'day7':due===30?'day30':'day90';
+    var bannerLabel=due===7?'Day 7 — Retrieval':due===30?'Day 30 — Integrity':'Day 90 — Pattern';
+    html+='<div class="checkin-banner '+bannerClass+'">';
+    html+='<div><strong>'+bannerLabel+'</strong><p>A check-in is waiting for this entry.</p></div>';
+    html+='<button class="btn btn-primary" style="padding:8px 16px;font-size:12px" onclick="startCheckin(\''+entry.id+'\','+due+')">Begin</button>';
+    html+='</div>';
+  }
+  // Fields
+  html+=detailField('What happened',escHtml(entry.what));
+  if(entry.feel) html+=detailField('How it feels',escHtml(entry.feel));
+  if(entry.assume) html+=detailField('The assumption',escHtml(entry.assume));
+  // Control
+  html+='<div class="detail-field">';
+  html+='<div class="detail-label">Control</div>';
+  html+='<div class="control-indicator">';
+  html+='<span class="detail-value mono">'+entry.control+'/4 — '+SLIDER_LABELS[entry.control]+'</span>';
+  html+='</div></div>';
+  if(entry.friend) html+=detailField('The friend test',escHtml(entry.friend));
+  if(entry.iiSignal||entry.iiAction){
+    html+='<div class="detail-field">';
+    html+='<div class="detail-label">Implementation Intention</div>';
+    if(entry.iiSignal) html+='<div class="detail-value" style="margin-bottom:4px"><span style="color:var(--text-dim);font-size:12px;font-family:JetBrains Mono,monospace">When I see</span> '+escHtml(entry.iiSignal)+'</div>';
+    if(entry.iiAction) html+='<div class="detail-value"><span style="color:var(--text-dim);font-size:12px;font-family:JetBrains Mono,monospace">I will</span> '+escHtml(entry.iiAction)+'</div>';
+    html+='</div>';
+  }
+  // Private note
+  html+='<div class="private-note-wrap" id="priv-wrap">';
+  html+='<div class="private-label"><span class="lock-badge">&#128274;</span> Private Note <button class="btn btn-secondary" style="padding:3px 10px;font-size:11px;margin-left:auto" onclick="editPrivateNote(\''+escHtml(entryId)+'\')">Edit</button></div>';
+  html+='<div id="priv-text" style="font-size:14px;color:var(--text);white-space:pre-wrap;line-height:1.65;min-height:20px">'+escHtml(entry.priv||'')+'</div>';
+  html+='</div>';
+  // Check-in history
+  var ciHtml=buildCheckinHistory(entry);
+  if(ciHtml) html+=ciHtml;
+  html+='</div>';
+  mc.innerHTML=html;
+}
+
+function detailField(label,val) {
+  return '<div class="detail-field"><div class="detail-label">'+label+'</div><div class="detail-value">'+val+'</div></div>';
+}
+
+function buildCheckinHistory(entry) {
+  var items=[];
+  if(entry.ci7) items.push({label:'Day 7 — Retrieval',data:entry.ci7});
+  if(entry.ci30) items.push({label:'Day 30 — Integrity',data:entry.ci30});
+  if(entry.ci90) items.push({label:'Day 90 — Pattern',data:entry.ci90});
+  if(!items.length) return '';
+  var html='<div class="ci-history"><h3>Growth Check-ins</h3>';
+  for(var i=0;i<items.length;i++){
+    var item=items[i];
+    html+='<div class="ci-card">';
+    html+='<div class="ci-card-label">'+item.label+'</div>';
+    for(var key in item.data){
+      if(item.data.hasOwnProperty(key)){
+        html+='<div class="ci-card-text" style="margin-bottom:6px"><span style="color:var(--text-dim);font-family:JetBrains Mono,monospace;font-size:11px">'+escHtml(key)+'</span><br>'+escHtml(item.data[key])+'</div>';
+      }
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function editPrivateNote(entryId) {
+  var entries=loadEntries();
+  var entry=null;
+  for(var i=0;i<entries.length;i++){if(entries[i].id===entryId){entry=entries[i];break;}}
+  if(!entry) return;
+  var wrap=document.getElementById('priv-wrap');
+  if(!wrap) return;
+  var html='<div class="private-label"><span class="lock-badge">&#128274;</span> Private Note</div>';
+  html+='<textarea id="priv-edit" rows="4" style="width:100%">'+escHtml(entry.priv||'')+'</textarea>';
+  html+='<div style="margin-top:8px;display:flex;gap:8px">';
+  html+='<button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="savePrivateNote(\''+entryId+'\')">Save</button>';
+  html+='<button class="btn btn-secondary" style="padding:6px 14px;font-size:12px" onclick="showDetail(\''+entryId+'\')">Cancel</button>';
+  html+='</div>';
+  wrap.innerHTML=html;
+}
+
+function savePrivateNote(entryId) {
+  var val=(document.getElementById('priv-edit').value||'');
+  var entries=loadEntries();
+  for(var i=0;i<entries.length;i++){
+    if(entries[i].id===entryId){entries[i].priv=val;break;}
+  }
+  saveEntries(entries);
+  showDetail(entryId);
+}
+
+// ── Check-in flows ────────────────────────────────────────────────────────
+var ciAdoc={};
+function startCheckin(entryId,stage) {
+  currentView='checkin';
+  ciAdoc={entryId:entryId,stage:stage,answers:{},acted:''};
+  var entries=loadEntries();
+  var entry=null;
+  for(var i=0;i<entries.length;i++){if(entries[i].id===entryId){entry=entries[i];break;}}
+  if(!entry) return;
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+  var area=getArea(entry.area);
+  var html='<div class="checkin-view">';
+  if(stage===7){
+    html+='<span class="stage-label" style="color:'+area.color+'">Day 7 — Retrieval</span>';
+    html+='<h2>What do you remember?</h2>';
+    html+='<p class="view-sub" style="margin-bottom:18px">Before looking at the entry — write what you recall.</p>';
+    html+='<textarea id="ci-q1" rows="4" placeholder="Write what you remember..."></textarea>';
+    html+='<div style="margin-top:16px"><button class="btn btn-primary" onclick="ciReveal7()">Reveal Entry</button></div>';
+    html+='<div class="revealed-entry" id="ci-reveal-box">'+buildEntryPreview(entry)+'</div>';
+    html+='<div id="ci-q2-block" style="display:none">';
+    html+='<p style="margin:18px 0 8px;font-size:14px;color:var(--text)">Now that you\'ve read it — what has shifted?</p>';
+    html+='<textarea id="ci-q2" rows="4" placeholder="What feels different now?"></textarea>';
+    html+='<div class="btn-row"><button class="btn btn-primary" onclick="saveCheckin7()">Save &amp; Close</button>';
+    html+='<button class="btn btn-secondary" onclick="showDetail(\''+entryId+'\')">Cancel</button></div>';
+    html+='</div>';
+  } else if(stage===30){
+    html+='<span class="stage-label" style="color:#4a7faa">Day 30 — Integrity</span>';
+    html+='<h2>Did you act on it?</h2>';
+    var iiText=(entry.iiSignal&&entry.iiAction)?'"When I see '+entry.iiSignal+', I will '+entry.iiAction+'"':'(No implementation intention recorded)';
+    html+='<div class="assumption-box" style="margin-bottom:16px">'+escHtml(iiText)+'</div>';
+    html+='<p style="font-size:14px;color:var(--text);margin-bottom:12px">Did you act on this intention?</p>';
+    html+='<div class="yesno-row">';
+    html+='<button class="yesno-btn" id="yn-yes" onclick="selectActed(\'Yes\')">Yes</button>';
+    html+='<button class="yesno-btn" id="yn-part" onclick="selectActed(\'Partially\')">Partially</button>';
+    html+='<button class="yesno-btn" id="yn-no" onclick="selectActed(\'No\')">No</button>';
+    html+='</div>';
+    html+='<div id="ci30-q2" style="display:none">';
+    html+='<p style="margin:16px 0 8px;font-size:14px;color:var(--text)">What is actually different now?</p>';
+    html+='<textarea id="ci-q2" rows="4" placeholder="What changed — internally or externally?"></textarea>';
+    html+='<div class="btn-row"><button class="btn btn-primary" onclick="saveCheckin30()">Save &amp; Close</button>';
+    html+='<button class="btn btn-secondary" onclick="showDetail(\''+entryId+'\')">Cancel</button></div>';
+    html+='</div>';
+  } else if(stage===90){
+    html+='<span class="stage-label" style="color:#a08020">Day 90 — Pattern</span>';
+    html+='<h2>Read this as if it happened to someone else.</h2>';
+    html+='<div class="revealed-entry" style="display:block;margin-bottom:18px">'+buildEntryPreview(entry)+'</div>';
+    html+='<p style="font-size:14px;color:var(--text);margin-bottom:12px">Is this pattern still active in your life?</p>';
+    html+='<div class="yesno-row">';
+    html+='<button class="yesno-btn" id="yn-yes" onclick="selectActed90(\'Yes\')">Yes</button>';
+    html+='<button class="yesno-btn" id="yn-part" onclick="selectActed90(\'Somewhat\')">Somewhat</button>';
+    html+='<button class="yesno-btn" id="yn-no" onclick="selectActed90(\'No\')">No</button>';
+    html+='</div>';
+    html+='<div id="ci90-q2" style="display:none">';
+    html+='<p style="margin:16px 0 8px;font-size:14px;color:var(--text)">What can you see now that you couldn\'t see then?</p>';
+    html+='<textarea id="ci-q3" rows="4" placeholder="The view from 90 days out..."></textarea>';
+    html+='<div class="btn-row"><button class="btn btn-primary" onclick="saveCheckin90()">Save &amp; Close</button>';
+    html+='<button class="btn btn-secondary" onclick="showDetail(\''+entryId+'\')">Cancel</button></div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  mc.innerHTML=html;
+}
+
+function buildEntryPreview(entry) {
+  var h='<div style="font-size:13px;line-height:1.7">';
+  h+='<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Entry — '+fmtDate(entry.ts)+'</div>';
+  h+='<div style="margin-bottom:8px"><span style="color:var(--text-dim);font-size:11px;font-family:JetBrains Mono,monospace">WHAT HAPPENED </span><br>'+escHtml(entry.what)+'</div>';
+  if(entry.feel) h+='<div style="margin-bottom:8px"><span style="color:var(--text-dim);font-size:11px;font-family:JetBrains Mono,monospace">FEELING </span><br>'+escHtml(entry.feel)+'</div>';
+  if(entry.assume) h+='<div style="margin-bottom:8px"><span style="color:var(--text-dim);font-size:11px;font-family:JetBrains Mono,monospace">ASSUMPTION </span><br>'+escHtml(entry.assume)+'</div>';
+  if(entry.friend) h+='<div><span style="color:var(--text-dim);font-size:11px;font-family:JetBrains Mono,monospace">FRIEND TEST </span><br>'+escHtml(entry.friend)+'</div>';
+  h+='</div>';
+  return h;
+}
+
+function ciReveal7() {
+  var q1=(document.getElementById('ci-q1').value||'').trim();
+  ciAdoc.answers.remembered=q1;
+  document.getElementById('ci-reveal-box').style.display='block';
+  document.getElementById('ci-q2-block').style.display='block';
+  document.querySelector('[onclick="ciReveal7()"]').style.display='none';
+}
+
+function saveCheckin7() {
+  var q2=(document.getElementById('ci-q2').value||'').trim();
+  ciAdoc.answers.shifted=q2;
+  var data={'Remembered':ciAdoc.answers.remembered||'','What shifted':q2};
+  persistCheckin(ciAdoc.entryId,7,data);
+}
+
+function selectActed(val) {
+  ciAdoc.acted=val;
+  var ids=['yn-yes','yn-part','yn-no'];
+  var vals=['Yes','Partially','No'];
+  for(var i=0;i<ids.length;i++){
+    var el=document.getElementById(ids[i]);
+    if(el) el.className='yesno-btn'+(vals[i]===val?' sel':'');
+  }
+  document.getElementById('ci30-q2').style.display='block';
+}
+
+function saveCheckin30() {
+  var q2=(document.getElementById('ci-q2').value||'').trim();
+  var data={'Acted on intention':ciAdoc.acted,'What\'s different now':q2};
+  persistCheckin(ciAdoc.entryId,30,data);
+}
+
+function selectActed90(val) {
+  ciAdoc.acted=val;
+  var ids=['yn-yes','yn-part','yn-no'];
+  var vals=['Yes','Somewhat','No'];
+  for(var i=0;i<ids.length;i++){
+    var el=document.getElementById(ids[i]);
+    if(el) el.className='yesno-btn'+(vals[i]===val?' sel':'');
+  }
+  document.getElementById('ci90-q2').style.display='block';
+}
+
+function saveCheckin90() {
+  var q3=(document.getElementById('ci-q3').value||'').trim();
+  var data={'Pattern still active':ciAdoc.acted,'New perspective':q3};
+  persistCheckin(ciAdoc.entryId,90,data);
+}
+
+function persistCheckin(entryId,stage,data) {
+  var entries=loadEntries();
+  for(var i=0;i<entries.length;i++){
+    if(entries[i].id===entryId){
+      if(stage===7) entries[i].ci7=data;
+      else if(stage===30) entries[i].ci30=data;
+      else if(stage===90) entries[i].ci90=data;
+      break;
+    }
+  }
+  saveEntries(entries);
+  renderAll();
+  showDetail(entryId);
+}
+
+// ── Rules Tab ─────────────────────────────────────────────────────────────
+function showRules() {
+  currentView='rules';
+  var rules=loadRules();
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+  var html='<div class="rules-view"><h2>My Rules</h2>';
+  html+='<p class="view-sub">Personal principles extracted from your failures.</p>';
+  if(!rules.length){
+    html+='<div class="empty-state">';
+    html+='<div class="icon">&#128220;</div>';
+    html+='<p>No rules yet.<br>When you save an entry with the <em>Assumption</em> field filled, you\'ll be invited to rewrite it as a rule.</p>';
+    html+='</div>';
+  } else {
+    for(var i=0;i<rules.length;i++){
+      var r=rules[i];
+      var area=getArea(r.area);
+      html+='<div class="rule-item">';
+      html+='<span class="rule-num">'+( i+1)+'.</span>';
+      html+='<div class="rule-body">';
+      html+='<div class="rule-text">'+escHtml(r.text)+'</div>';
+      html+='<div class="rule-source">';
+      html+='<span class="area-dot" style="background:'+area.color+';display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px"></span>';
+      html+=escHtml(r.entryWhat?r.entryWhat.slice(0,60)+(r.entryWhat.length>60?'…':''):'')+'</div>';
+      html+='</div>';
+      html+='<button class="rule-del" onclick="deleteRule(\''+r.id+'\')">&#215;</button>';
+      html+='</div>';
+    }
+  }
+  html+='</div>';
+  mc.innerHTML=html;
+  document.getElementById('entry-list').style.display='none';
+}
+
+function deleteRule(ruleId) {
+  var rules=loadRules();
+  var newRules=[];
+  for(var i=0;i<rules.length;i++){if(rules[i].id!==ruleId) newRules.push(rules[i]);}
+  saveRules(newRules);
+  showRules();
+}
+
+// ── Map Tab ───────────────────────────────────────────────────────────────
+function showMap() {
+  currentView='map';
+  var entries=loadEntries();
+  var mc=document.getElementById('main-content');
+  mc.scrollTop=0;
+  // Build month/area grid for past 12 months
+  var n=now();
+  var months=[];
+  for(var m=11;m>=0;m--){
+    var d=new Date(n.getFullYear(),n.getMonth()-m,1);
+    months.push({year:d.getFullYear(),month:d.getMonth()});
+  }
+  // Count entries per area per month
+  var grid={};
+  var areaCounts={};
+  for(var ai=0;ai<AREAS.length;ai++){
+    grid[AREAS[ai].id]={};
+    areaCounts[AREAS[ai].id]=0;
+    for(var mi=0;mi<months.length;mi++){
+      grid[AREAS[ai].id][mi]=[];
+    }
+  }
+  for(var ei=0;ei<entries.length;ei++){
+    var e=entries[ei];
+    var ed=new Date(e.ts);
+    for(var mi2=0;mi2<months.length;mi2++){
+      if(ed.getFullYear()===months[mi2].year&&ed.getMonth()===months[mi2].month){
+        if(grid[e.area]&&grid[e.area][mi2]) grid[e.area][mi2].push(e.id);
+        if(areaCounts[e.area]!==undefined) areaCounts[e.area]++;
+        break;
+      }
+    }
+  }
+  var total=entries.length;
+  var html='<div class="map-view"><h2>Map</h2>';
+  html+='<p class="view-sub" style="margin-bottom:20px">12-month view across life areas.</p>';
+  html+='<div class="map-grid-wrap"><div class="map-grid">';
+  // Header row
+  html+='<div class="map-header"></div>';
+  for(var mi3=0;mi3<months.length;mi3++){
+    html+='<div class="map-header">'+fmtMonth(months[mi3].month)+'</div>';
+  }
+  // Area rows
+  for(var ai2=0;ai2<AREAS.length;ai2++){
+    var area=AREAS[ai2];
+    html+='<div class="map-row-label"><span class="area-dot" style="background:'+area.color+'"></span>'+area.label+'</div>';
+    for(var mi4=0;mi4<months.length;mi4++){
+      var cellEntries=grid[area.id][mi4];
+      var cnt=cellEntries.length;
+      var op=cnt===0?0:Math.min(0.15+cnt*0.18,0.9);
+      var bgColor=cnt===0?'var(--bg4)':area.color;
+      var tip=cnt+' '+(cnt===1?'entry':'entries')+' — '+fmtMonth(months[mi4].month)+' '+months[mi4].year;
+      // click to first entry if present
+      var clickAttr=cnt>0?'onclick="showDetail(\''+cellEntries[0]+'\')"':'';
+      html+='<div class="map-cell" data-tip="'+escHtml(tip)+'" style="background:'+bgColor+';opacity:'+op+(cnt===0?';background:var(--bg4);opacity:1':'')+'" '+clickAttr+'></div>';
+    }
+  }
+  html+='</div></div>';
+  // Breakdown
+  html+='<div class="area-breakdown">';
+  for(var ai3=0;ai3<AREAS.length;ai3++){
+    var ar=AREAS[ai3];
+    var cnt2=areaCounts[ar.id];
+    var pct=total>0?Math.round((cnt2/total)*100):0;
+    var barW=total>0?(cnt2/total)*100:0;
+    html+='<div class="area-card">';
+    html+='<div class="area-card-label"><span class="area-dot" style="background:'+ar.color+'"></span>'+ar.label+'</div>';
+    html+='<div class="area-card-count">'+cnt2+'</div>';
+    html+='<div class="area-card-pct">'+pct+'% of entries</div>';
+    html+='<div class="area-bar-wrap"><div class="area-bar" style="width:'+barW+'%;background:'+ar.color+'"></div></div>';
+    html+='</div>';
+  }
+  html+='</div></div>';
+  mc.innerHTML=html;
+  document.getElementById('entry-list').style.display='none';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderAll();
+showHome();
+</script>
+</body>
+</html>
