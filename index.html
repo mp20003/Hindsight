@@ -939,9 +939,147 @@ function showMap() {
     html+='<div class="area-bar-wrap"><div class="area-bar" style="width:'+barW+'%;background:'+ar.color+'"></div></div>';
     html+='</div>';
   }
-  html+='</div></div>';
+  html+='</div>';
+  
+  // Radar Chart
+  html+=buildRadarChart(entries);
+
+  html+='</div>';
   mc.innerHTML=html;
   document.getElementById('entry-list').style.display='none';
+}
+
+// ── Radar Chart ───────────────────────────────────────────────────────────
+function buildRadarChart(entries) {
+  var html='<div style="margin-top:40px;padding-top:30px;border-top:1px solid var(--border)">';
+  html+='<div style="font-size:9px;font-family:\'JetBrains Mono\',monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:20px">Assumption Blind Spots</div>';
+  
+  var cats = [
+    {id:'people', label:'People', rx:/\b(they|he|she|them|him|her|people|team|someone|everyone|colleague|friend|partner|client|manager)\b/gi, count:0},
+    {id:'time', label:'Time', rx:/\b(time|deadline|later|soon|quickly|fast|week|day|month|hour|rush|delay|finish)\b/gi, count:0},
+    {id:'systems', label:'Systems', rx:/\b(work|process|system|tool|platform|email|app|it would|automatically|handled|organised)\b/gi, count:0},
+    {id:'self', label:'Self', rx:/\b(I can|I will|I would|I remember|I knew|myself|capable|handle|ready|manage|cope)\b/gi, count:0},
+    {id:'info', label:'Information', rx:/\b(know|understand|clear|obvious|told|aware|informed|enough|context|picture|assumed|thought)\b/gi, count:0}
+  ];
+
+  var classifiedCount = 0;
+  for (var i=0; i<entries.length; i++) {
+    var txt = entries[i].assume;
+    if (!txt) continue;
+    var matches = [];
+    for (var j=0; j<cats.length; j++) {
+      var m = txt.match(cats[j].rx);
+      matches.push(m ? m.length : 0);
+    }
+    var maxHits = 0;
+    var maxIdx = -1;
+    for (var k=0; k<matches.length; k++) {
+      if (matches[k] > maxHits) { maxHits = matches[k]; maxIdx = k; }
+    }
+    if (maxHits > 0) {
+      cats[maxIdx].count++;
+      classifiedCount++;
+    }
+  }
+
+  if (classifiedCount < 3) {
+    html += '<div style="background:var(--bg3);border-radius:var(--r);padding:30px;text-align:center;color:var(--text-dim);font-size:13px;font-style:italic">';
+    html += 'Log at least 3 entries with assumptions to see your blind spot shape.';
+    html += '</div></div>';
+    return html;
+  }
+
+  var maxVal = 0;
+  var topCat = cats[0];
+  for (var c=0; c<cats.length; c++) {
+    if (cats[c].count > maxVal) { maxVal = cats[c].count; topCat = cats[c]; }
+  }
+  // Ensure we don't divide by zero if something weird happens
+  if (maxVal === 0) maxVal = 1;
+
+  var size = 420;
+  var center = size/2;
+  var radius = 120; // max distance from center
+  var angles = [-90, -18, 54, 126, 198]; // 5 points starting top
+  
+  var svg = '<div style="display:flex;justify-content:center;margin-bottom:20px">';
+  svg += '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">';
+  
+  // BG rings
+  var rings = [0.25, 0.5, 0.75, 1];
+  for (var r=0; r<rings.length; r++) {
+    var pts = '';
+    for (var a=0; a<angles.length; a++) {
+      var rad = angles[a] * Math.PI / 180;
+      var px = center + Math.cos(rad) * radius * rings[r];
+      var py = center + Math.sin(rad) * radius * rings[r];
+      pts += px + ',' + py + ' ';
+    }
+    svg += '<polygon points="'+pts+'" fill="none" stroke="#2e2a26" stroke-width="1"/>';
+  }
+
+  // Axes lines connecting from center
+  for (var a=0; a<angles.length; a++) {
+    var rad = angles[a] * Math.PI / 180;
+    var px = center + Math.cos(rad) * radius;
+    var py = center + Math.sin(rad) * radius;
+    svg += '<line x1="'+center+'" y1="'+center+'" x2="'+px+'" y2="'+py+'" stroke="#2e2a26" stroke-width="1"/>';
+  }
+
+  // Data Polygon
+  var dataPts = '';
+  for (var a=0; a<angles.length; a++) {
+    var rad = angles[a] * Math.PI / 180;
+    var norm = cats[a].count / maxVal;
+    var dpX = center + Math.cos(rad) * radius * norm;
+    var dpY = center + Math.sin(rad) * radius * norm;
+    dataPts += dpX + ',' + dpY + ' ';
+  }
+  
+  // Wrapped in a g tags for anim
+  svg += '<g style="transform-origin: '+center+'px '+center+'px">';
+  svg += '<animateTransform attributeName="transform" type="scale" from="0" to="1" dur="0.6s" begin="0s" fill="freeze" />';
+  svg += '<polygon points="'+dataPts+'" fill="#c4622a" fill-opacity="0.3" stroke="#c4622a" stroke-width="2"/>';
+  svg += '</g>';
+
+  // Labels
+  for (var a=0; a<angles.length; a++) {
+    var rad = angles[a] * Math.PI / 180;
+    var lpX = center + Math.cos(rad) * (radius + 20);
+    var lpY = center + Math.sin(rad) * (radius + 20);
+    
+    // Adjust text alignment based on position
+    var anchor = 'middle';
+    if (Math.cos(rad) > 0.1) anchor = 'start';
+    else if (Math.cos(rad) < -0.1) anchor = 'end';
+    
+    // Minor y offset for better vertical centering
+    lpY += 4;
+    
+    svg += '<text x="'+lpX+'" y="'+lpY+'" text-anchor="'+anchor+'" font-family="\'JetBrains Mono\',monospace" font-size="10" fill="#5a5450">';
+    svg += cats[a].label;
+    svg += ' <tspan font-family="\'Lora\',serif" font-style="italic" fill="#c4622a">'+cats[a].count+'</tspan>';
+    svg += '</text>';
+  }
+
+  svg += '</svg></div>';
+  html += svg;
+
+  // Insight string
+  var insights = {
+    'people': 'Your blind spot is mostly about People — you consistently overestimate how much others will communicate without being asked.',
+    'time': 'Your blind spot is mostly about Time — you consistently underestimate how long tasks will take or assume infinite availability.',
+    'systems': 'Your blind spot is mostly about Systems — you assume tools, rules, and processes will work perfectly without intervention.',
+    'self': 'Your blind spot is mostly about Self — you over-index on your own willpower, memory, and capacity in the moment.',
+    'info': 'Your blind spot is mostly about Information — you frequently act assuming you have the full picture when you do not.'
+  };
+
+  html += '<p style="text-align:center;font-size:14px;color:var(--text);font-style:italic;max-width:480px;margin:0 auto">';
+  html += insights[topCat.id];
+  html += '</p>';
+
+  html += '</div>';
+  return html;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
